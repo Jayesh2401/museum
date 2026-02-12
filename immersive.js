@@ -136,6 +136,7 @@ const state = {
   targetProgress: 0,
   activeIndex: -1,
   heroVisible: false,
+  heroTargetVisible: false,
   heroAnimating: false,
   pendingIndex: -1,
   mouseX: 0,
@@ -166,8 +167,10 @@ const layout = {
   postCameraFade: 1.1,
   farCullDistance: 13.5,
   headingSwitchGap: 1.7,
-  heroShowZMin: -4.8,
-  heroShowZMax: -0.9,
+  heroShowZMin: -8.5,
+  heroShowZMax: -0.35,
+  heroHideZMin: -9.4,
+  heroHideZMax: 0.4,
   parallaxX: 0.32,
   parallaxY: 0.12,
 };
@@ -221,23 +224,28 @@ function clamp01(value) {
 }
 
 function setHeroVisibility(visible) {
-  if (visible === state.heroVisible && !state.heroAnimating) {
+  if (!state.heroAnimating && visible === state.heroVisible) {
+    return;
+  }
+  if (state.heroAnimating && visible === state.heroTargetVisible) {
     return;
   }
 
+  state.heroTargetVisible = visible;
   gsap.killTweensOf([epochEl, titleEl, descriptionEl]);
   state.heroAnimating = true;
 
   if (!visible) {
     gsap.to([epochEl, titleEl, descriptionEl], {
       autoAlpha: 0,
-      y: -8,
-      duration: 0.18,
+      y: -4,
+      duration: 0.22,
       stagger: 0.02,
-      ease: "power2.out",
+      ease: "power3.out",
       onComplete: () => {
         state.heroVisible = false;
         state.heroAnimating = false;
+        state.heroTargetVisible = false;
         if (state.pendingIndex >= 0) {
           const nextIndex = state.pendingIndex;
           state.pendingIndex = -1;
@@ -252,15 +260,16 @@ function setHeroVisibility(visible) {
   state.heroVisible = true;
   gsap.fromTo(
     [epochEl, titleEl, descriptionEl],
-    { autoAlpha: 0, y: 12 },
+    { autoAlpha: 0, y: 8 },
     {
       autoAlpha: 1,
       y: 0,
-      duration: 0.24,
+      duration: 0.34,
       stagger: 0.03,
-      ease: "power2.out",
+      ease: "power3.out",
       onComplete: () => {
         state.heroAnimating = false;
+        state.heroTargetVisible = true;
         playTextEntryAnimation(state.activeIndex);
       },
     },
@@ -464,23 +473,21 @@ function playTextEntryAnimation(index) {
   const tl = gsap.timeline();
   const titleWords = titleEl.querySelectorAll(".title-word");
   gsap.killTweensOf([epochEl, titleWords, descriptionEl]);
+  gsap.set(titleWords, { autoAlpha: 0, y: 0, x: 0, rotationX: 0, skewX: 0, scale: 1 });
+  gsap.set([epochEl, descriptionEl], { autoAlpha: 1, y: 0, x: 0 });
 
   if (variant === 0) {
-    tl.fromTo(epochEl, { y: 10 }, { y: 0, duration: 0.24, ease: "power2.out" })
-      .fromTo(titleWords, { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.42, stagger: 0.05, ease: "power3.out" }, "-=0.12")
-      .fromTo(descriptionEl, { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.32, ease: "power2.out" }, "-=0.25");
+    tl.fromTo(titleWords, { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.42, stagger: 0.04, ease: "power3.out" })
+      .fromTo(descriptionEl, { autoAlpha: 0, y: 8 }, { autoAlpha: 1, y: 0, duration: 0.3, ease: "power2.out" }, "-=0.22");
   } else if (variant === 1) {
-    tl.fromTo(epochEl, { y: -12 }, { y: 0, duration: 0.24, ease: "power2.out" })
-      .fromTo(titleWords, { autoAlpha: 0, scale: 0.96, y: 10 }, { autoAlpha: 1, scale: 1, y: 0, duration: 0.44, stagger: 0.04, ease: "expo.out" }, "-=0.12")
-      .fromTo(descriptionEl, { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.32, ease: "power2.out" }, "-=0.2");
+    tl.fromTo(titleWords, { autoAlpha: 0, scale: 0.98, y: 8 }, { autoAlpha: 1, scale: 1, y: 0, duration: 0.44, stagger: 0.038, ease: "expo.out" })
+      .fromTo(descriptionEl, { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.3, ease: "power2.out" }, "-=0.22");
   } else if (variant === 2) {
-    tl.fromTo(epochEl, { x: -18 }, { x: 0, duration: 0.28, ease: "power3.out" })
-      .fromTo(titleWords, { autoAlpha: 0, x: 16 }, { autoAlpha: 1, x: 0, duration: 0.38, stagger: 0.04, ease: "power3.out" }, "-=0.16")
-      .fromTo(descriptionEl, { autoAlpha: 0, x: -14 }, { autoAlpha: 1, x: 0, duration: 0.3, ease: "power2.out" }, "-=0.24");
+    tl.fromTo(titleWords, { autoAlpha: 0, x: 10 }, { autoAlpha: 1, x: 0, duration: 0.38, stagger: 0.035, ease: "power3.out" })
+      .fromTo(descriptionEl, { autoAlpha: 0, x: -8 }, { autoAlpha: 1, x: 0, duration: 0.28, ease: "power2.out" }, "-=0.2");
   } else {
-    tl.fromTo(epochEl, { y: 8 }, { y: 0, duration: 0.24, ease: "power2.out" })
-      .fromTo(titleWords, { autoAlpha: 0, y: -14, rotationX: -14, transformOrigin: "50% 0%" }, { autoAlpha: 1, y: 0, rotationX: 0, duration: 0.42, stagger: 0.04, ease: "back.out(1.4)" }, "-=0.1")
-      .fromTo(descriptionEl, { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.32, ease: "power2.out" }, "-=0.2");
+    tl.fromTo(titleWords, { autoAlpha: 0, y: -10, rotationX: -10, transformOrigin: "50% 0%" }, { autoAlpha: 1, y: 0, rotationX: 0, duration: 0.4, stagger: 0.038, ease: "back.out(1.35)" })
+      .fromTo(descriptionEl, { autoAlpha: 0, y: 8 }, { autoAlpha: 1, y: 0, duration: 0.28, ease: "power2.out" }, "-=0.2");
   }
 }
 
@@ -586,7 +593,7 @@ function render() {
       opacity *= pastCameraFade;
     }
 
-    if (worldZ <= 0.6 && worldZ > heroCandidateZ) {
+    if (worldZ <= layout.heroShowZMax && worldZ > heroCandidateZ) {
       heroCandidateZ = worldZ;
       heroCandidateIndex = plane.userData.index;
     }
@@ -598,10 +605,15 @@ function render() {
     plane.userData.material.uniforms.uMouse.value.set(state.mouseX, state.mouseY);
   });
 
-  const heroShouldShow =
+  const heroInShowWindow =
     heroCandidateIndex >= 0 &&
     heroCandidateZ >= layout.heroShowZMin &&
     heroCandidateZ <= layout.heroShowZMax;
+  const heroInKeepWindow =
+    heroCandidateIndex >= 0 &&
+    heroCandidateZ >= layout.heroHideZMin &&
+    heroCandidateZ <= layout.heroHideZMax;
+  const heroShouldShow = state.heroVisible || state.heroAnimating ? heroInKeepWindow : heroInShowWindow;
 
   if (heroShouldShow) {
     if (heroCandidateIndex !== state.activeIndex) {
