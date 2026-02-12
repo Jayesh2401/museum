@@ -135,10 +135,17 @@ const state = {
   progress: 0,
   targetProgress: 0,
   activeIndex: -1,
+  heroVisible: false,
+  heroAnimating: false,
+  pendingIndex: -1,
   mouseX: 0,
   mouseY: 0,
   targetMouseX: 0,
   targetMouseY: 0,
+  sceneOffsetX: 0,
+  sceneOffsetY: 0,
+  targetSceneOffsetX: 0,
+  targetSceneOffsetY: 0,
 };
 
 let scene;
@@ -159,6 +166,10 @@ const layout = {
   postCameraFade: 1.1,
   farCullDistance: 13.5,
   headingSwitchGap: 1.7,
+  heroShowZMin: -4.8,
+  heroShowZMax: -0.9,
+  parallaxX: 0.32,
+  parallaxY: 0.12,
 };
 
 const timelineRefs = [];
@@ -207,6 +218,58 @@ function buildTimeline() {
 
 function clamp01(value) {
   return Math.max(0, Math.min(1, value));
+}
+
+function setHeroVisibility(visible) {
+  if (visible === state.heroVisible && !state.heroAnimating) {
+    return;
+  }
+
+  gsap.killTweensOf([epochEl, titleEl, descriptionEl]);
+  state.heroAnimating = true;
+
+  if (!visible) {
+    gsap.to([epochEl, titleEl, descriptionEl], {
+      autoAlpha: 0,
+      y: -8,
+      duration: 0.18,
+      stagger: 0.02,
+      ease: "power2.out",
+      onComplete: () => {
+        state.heroVisible = false;
+        state.heroAnimating = false;
+        if (state.pendingIndex >= 0) {
+          const nextIndex = state.pendingIndex;
+          state.pendingIndex = -1;
+          updateActiveInfo(nextIndex);
+          setHeroVisibility(true);
+        }
+      },
+    });
+    return;
+  }
+
+  state.heroVisible = true;
+  gsap.fromTo(
+    [epochEl, titleEl, descriptionEl],
+    { autoAlpha: 0, y: 12 },
+    {
+      autoAlpha: 1,
+      y: 0,
+      duration: 0.24,
+      stagger: 0.03,
+      ease: "power2.out",
+      onComplete: () => {
+        state.heroAnimating = false;
+        playTextEntryAnimation(state.activeIndex);
+      },
+    },
+  );
+}
+
+function setTitleWords(text) {
+  const words = text.split(/\s+/).filter(Boolean);
+  titleEl.innerHTML = words.map((word) => `<span class="title-word">${word}</span>`).join(" ");
 }
 
 function createCardMaterial(texture) {
@@ -396,6 +459,31 @@ function setupScene() {
   scene.add(floor);
 }
 
+function playTextEntryAnimation(index) {
+  const variant = index % 4;
+  const tl = gsap.timeline();
+  const titleWords = titleEl.querySelectorAll(".title-word");
+  gsap.killTweensOf([epochEl, titleWords, descriptionEl]);
+
+  if (variant === 0) {
+    tl.fromTo(epochEl, { y: 10 }, { y: 0, duration: 0.24, ease: "power2.out" })
+      .fromTo(titleWords, { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.42, stagger: 0.05, ease: "power3.out" }, "-=0.12")
+      .fromTo(descriptionEl, { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.32, ease: "power2.out" }, "-=0.25");
+  } else if (variant === 1) {
+    tl.fromTo(epochEl, { y: -12 }, { y: 0, duration: 0.24, ease: "power2.out" })
+      .fromTo(titleWords, { autoAlpha: 0, scale: 0.96, y: 10 }, { autoAlpha: 1, scale: 1, y: 0, duration: 0.44, stagger: 0.04, ease: "expo.out" }, "-=0.12")
+      .fromTo(descriptionEl, { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.32, ease: "power2.out" }, "-=0.2");
+  } else if (variant === 2) {
+    tl.fromTo(epochEl, { x: -18 }, { x: 0, duration: 0.28, ease: "power3.out" })
+      .fromTo(titleWords, { autoAlpha: 0, x: 16 }, { autoAlpha: 1, x: 0, duration: 0.38, stagger: 0.04, ease: "power3.out" }, "-=0.16")
+      .fromTo(descriptionEl, { autoAlpha: 0, x: -14 }, { autoAlpha: 1, x: 0, duration: 0.3, ease: "power2.out" }, "-=0.24");
+  } else {
+    tl.fromTo(epochEl, { y: 8 }, { y: 0, duration: 0.24, ease: "power2.out" })
+      .fromTo(titleWords, { autoAlpha: 0, y: -14, rotationX: -14, transformOrigin: "50% 0%" }, { autoAlpha: 1, y: 0, rotationX: 0, duration: 0.42, stagger: 0.04, ease: "back.out(1.4)" }, "-=0.1")
+      .fromTo(descriptionEl, { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.32, ease: "power2.out" }, "-=0.2");
+  }
+}
+
 function updateActiveInfo(index) {
   if (index === state.activeIndex) {
     return;
@@ -403,63 +491,10 @@ function updateActiveInfo(index) {
 
   state.activeIndex = index;
   const data = timelineItems[index];
-
-  gsap.killTweensOf([epochEl, titleEl, descriptionEl]);
-  gsap.to([epochEl, titleEl, descriptionEl], {
-    autoAlpha: 0,
-    y: 16,
-    filter: "blur(8px)",
-    duration: 0.2,
-    stagger: 0.03,
-    ease: "power2.out",
-    onComplete: () => {
-      epochEl.textContent = data.year;
-      titleEl.textContent = data.title;
-      descriptionEl.textContent = data.description;
-      const variant = index % 4;
-      const tl = gsap.timeline();
-
-      if (variant === 0) {
-        tl.fromTo(
-          [epochEl, titleEl, descriptionEl],
-          { autoAlpha: 0, y: 26, filter: "blur(12px)" },
-          { autoAlpha: 1, y: 0, filter: "blur(0px)", duration: 0.55, stagger: 0.07, ease: "power3.out" },
-        );
-      } else if (variant === 1) {
-        tl.fromTo(epochEl, { autoAlpha: 0, y: -16 }, { autoAlpha: 1, y: 0, duration: 0.35, ease: "power2.out" })
-          .fromTo(
-            titleEl,
-            { autoAlpha: 0, scale: 0.92, letterSpacing: "0.12em" },
-            { autoAlpha: 1, scale: 1, letterSpacing: "0.02em", duration: 0.58, ease: "expo.out" },
-            "-=0.18",
-          )
-          .fromTo(descriptionEl, { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: "power3.out" }, "-=0.2");
-      } else if (variant === 2) {
-        tl.fromTo(epochEl, { autoAlpha: 0, x: -32 }, { autoAlpha: 1, x: 0, duration: 0.38, ease: "power3.out" })
-          .fromTo(
-            titleEl,
-            { autoAlpha: 0, x: 26, skewX: -8, filter: "blur(6px)" },
-            { autoAlpha: 1, x: 0, skewX: 0, filter: "blur(0px)", duration: 0.52, ease: "power3.out" },
-            "-=0.2",
-          )
-          .fromTo(descriptionEl, { autoAlpha: 0, x: -22 }, { autoAlpha: 1, x: 0, duration: 0.36, ease: "power2.out" }, "-=0.3");
-      } else {
-        tl.fromTo(epochEl, { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.32, ease: "power2.out" })
-          .fromTo(
-            titleEl,
-            { autoAlpha: 0, y: -24, rotationX: -22, transformOrigin: "50% 0%" },
-            { autoAlpha: 1, y: 0, rotationX: 0, duration: 0.58, ease: "back.out(1.6)" },
-            "-=0.12",
-          )
-          .fromTo(
-            descriptionEl,
-            { autoAlpha: 0, y: 16, filter: "blur(8px)" },
-            { autoAlpha: 1, y: 0, filter: "blur(0px)", duration: 0.42, ease: "power2.out" },
-            "-=0.26",
-          );
-      }
-    },
-  });
+  epochEl.textContent = data.year;
+  setTitleWords(data.title);
+  descriptionEl.textContent = data.description;
+  gsap.set([epochEl, titleEl, descriptionEl], { clearProps: "filter" });
 
   timelineRefs.forEach((ref, refIndex) => {
     const active = refIndex === index;
@@ -488,19 +523,32 @@ function setupScroll() {
 function handlePointerMove(event) {
   state.targetMouseX = (event.clientX / window.innerWidth) * 2 - 1;
   state.targetMouseY = -((event.clientY / window.innerHeight) * 2 - 1);
+  state.targetSceneOffsetX = state.targetMouseX * layout.parallaxX;
+  state.targetSceneOffsetY = state.targetMouseY * layout.parallaxY;
+}
+
+function handlePointerLeave() {
+  state.targetMouseX = 0;
+  state.targetMouseY = 0;
+  state.targetSceneOffsetX = 0;
+  state.targetSceneOffsetY = 0;
 }
 
 function render() {
   state.progress += (state.targetProgress - state.progress) * 0.07;
   state.mouseX += (state.targetMouseX - state.mouseX) * 0.08;
   state.mouseY += (state.targetMouseY - state.mouseY) * 0.08;
+  state.sceneOffsetX += (state.targetSceneOffsetX - state.sceneOffsetX) * 0.06;
+  state.sceneOffsetY += (state.targetSceneOffsetY - state.sceneOffsetY) * 0.06;
 
   const depthTravel = (timelineItems.length - 1) * layout.cardSpacing + 12;
   const travel = state.progress * depthTravel;
   cardsGroup.position.z = travel;
-  camera.position.x = 0;
-  camera.position.y = 0.2;
-  camera.lookAt(0, 0.15, -12);
+  cardsGroup.position.x = state.sceneOffsetX;
+  cardsGroup.position.y = state.sceneOffsetY * 0.18;
+  camera.position.x = -state.sceneOffsetX * 0.22;
+  camera.position.y = 0.2 - state.sceneOffsetY * 0.12;
+  camera.lookAt(state.sceneOffsetX * 0.3, 0.15 + state.sceneOffsetY * 0.25, -12);
 
   if (timelineCursor) {
     timelineCursor.style.left = `${state.progress * 100}%`;
@@ -509,16 +557,10 @@ function render() {
     timelineProgress.style.width = `${state.progress * 100}%`;
   }
 
-  const firstSwitchTravel = Math.abs(layout.depthBase) + layout.headingSwitchGap;
-  let activeIndex = 0;
-  if (travel >= firstSwitchTravel) {
-    activeIndex = 1 + Math.floor((travel - firstSwitchTravel) / layout.cardSpacing);
-    activeIndex = Math.max(0, Math.min(timelineItems.length - 1, activeIndex));
-  }
-  updateActiveInfo(activeIndex);
-
   const depthCursor = camera.position.z - cardsGroup.position.z;
   const laneX = (window.innerWidth > 1280 ? 2.2 : 1.9) * (window.innerWidth < 900 ? 0.88 : 1);
+  let heroCandidateIndex = -1;
+  let heroCandidateZ = -999;
 
   cardsGroup.children.forEach((plane) => {
     const distance = Math.abs(plane.userData.baseZ - depthCursor);
@@ -544,12 +586,41 @@ function render() {
       opacity *= pastCameraFade;
     }
 
+    if (worldZ <= 0.6 && worldZ > heroCandidateZ) {
+      heroCandidateZ = worldZ;
+      heroCandidateIndex = plane.userData.index;
+    }
+
     plane.userData.material.uniforms.uOpacity.value = opacity;
     plane.userData.material.uniforms.uContrast.value = 1.1 + near * 0.35;
     plane.userData.material.uniforms.uBrightness.value = 0.015 + near * 0.06;
     plane.userData.material.uniforms.uGloss.value = 0.16 + near * 0.46;
     plane.userData.material.uniforms.uMouse.value.set(state.mouseX, state.mouseY);
   });
+
+  const heroShouldShow =
+    heroCandidateIndex >= 0 &&
+    heroCandidateZ >= layout.heroShowZMin &&
+    heroCandidateZ <= layout.heroShowZMax;
+
+  if (heroShouldShow) {
+    if (heroCandidateIndex !== state.activeIndex) {
+      if (state.heroVisible || state.heroAnimating) {
+        state.pendingIndex = heroCandidateIndex;
+        if (state.heroVisible) {
+          setHeroVisibility(false);
+        }
+      } else {
+        updateActiveInfo(heroCandidateIndex);
+        setHeroVisibility(true);
+      }
+    } else if (!state.heroVisible && !state.heroAnimating) {
+      setHeroVisibility(true);
+    }
+  } else {
+    state.pendingIndex = -1;
+    setHeroVisibility(false);
+  }
 
   timelineRefs.forEach((ref, index) => {
     const plane = cardsGroup.children[index];
@@ -591,10 +662,12 @@ async function init() {
   await buildCards();
   setupScroll();
   updateActiveInfo(0);
+  setHeroVisibility(false);
   render();
 
   window.addEventListener("resize", handleResize);
   window.addEventListener("pointermove", handlePointerMove, { passive: true });
+  window.addEventListener("pointerleave", handlePointerLeave);
 }
 
 init().catch((error) => {
@@ -609,4 +682,5 @@ window.addEventListener("beforeunload", () => {
   ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
   renderer?.dispose();
   window.removeEventListener("pointermove", handlePointerMove);
+  window.removeEventListener("pointerleave", handlePointerLeave);
 });
