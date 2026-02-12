@@ -120,6 +120,7 @@ body {
   letter-spacing: 0.16em;
   font-weight: 500;
   color: rgba(246, 245, 243, 0.92);
+  min-height: 1.3em;
 }
 
 .hero-copy h1 {
@@ -130,6 +131,14 @@ body {
   letter-spacing: 0.02em;
   font-weight: 600;
   text-wrap: balance;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  min-height: 1.15em;
+}
+
+.title-word {
+  display: inline-block;
+  will-change: transform, opacity;
 }
 
 .artifact-description {
@@ -139,6 +148,7 @@ body {
   line-height: 1.55;
   color: var(--muted);
   text-wrap: pretty;
+  min-height: 3.1em;
 }
 
 .timeline-wrap {
