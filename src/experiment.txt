@@ -1,0 +1,504 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import * as THREE from 'three'
+
+const DEFAULT_CONFIG = {
+  frameCount: 9,
+  frameWidth: 3.4,
+  frameHeight: 4.8,
+  frameDepth: 0.22,
+  frameBorder: 0.2,
+  frameInset: 0.16,
+  domeDepth: 0.18,
+  depthOffset: -0.18,
+  yOffset: 0,
+  rotationOffsetDeg: 20,
+  roundTop: 3.2,
+  roundBottom: 0.8,
+  roundLeft: 2.6,
+  roundRight: 2.6,
+  wallRadiusX: 8.2,
+  wallRadiusZ: 6.4,
+  wallHeight: 8.8,
+  wallColor: '#f5f6fb',
+  frameColor: '#dcb4cf',
+  floorColor: '#ffffff',
+  roofColor: '#f8fbff',
+  sceneTint: '#edf2ff',
+  frameMetalness: 0.35,
+  frameRoughness: 0.24,
+  frameGap: 1,
+  scrollRotateStrength: 0.002,
+  glassTransmission: 0.75,
+  glassRoughness: 0.08,
+  glassThickness: 0.6,
+  glassIor: 1.32,
+  glassOpacity: 0.88,
+  cameraX: 0.55,
+  cameraY: 0.06,
+  cameraZ: 3.8,
+  cameraLookY: -0.06,
+  cameraFov: 64
+}
+
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v))
+}
+
+function createRoundedRectShape(width, height, rTop, rBottom, rLeft, rRight) {
+  const w = width / 2
+  const h = height / 2
+  const maxR = Math.min(width, height) * 0.49
+
+  const tl = clamp(Math.min(rTop, rLeft), 0, maxR)
+  const tr = clamp(Math.min(rTop, rRight), 0, maxR)
+  const br = clamp(Math.min(rBottom, rRight), 0, maxR)
+  const bl = clamp(Math.min(rBottom, rLeft), 0, maxR)
+
+  const shape = new THREE.Shape()
+  shape.moveTo(-w + tl, h)
+  shape.lineTo(w - tr, h)
+  if (tr > 0) shape.quadraticCurveTo(w, h, w, h - tr)
+  shape.lineTo(w, -h + br)
+  if (br > 0) shape.quadraticCurveTo(w, -h, w - br, -h)
+  shape.lineTo(-w + bl, -h)
+  if (bl > 0) shape.quadraticCurveTo(-w, -h, -w, -h + bl)
+  shape.lineTo(-w, h - tl)
+  if (tl > 0) shape.quadraticCurveTo(-w, h, -w + tl, h)
+
+  return shape
+}
+
+function createFrameShapes(cfg) {
+  const outer = createRoundedRectShape(
+    cfg.frameWidth,
+    cfg.frameHeight,
+    cfg.roundTop,
+    cfg.roundBottom,
+    cfg.roundLeft,
+    cfg.roundRight
+  )
+
+  const border = clamp(cfg.frameBorder, 0.03, Math.min(cfg.frameWidth, cfg.frameHeight) * 0.42)
+  const innerWidth = clamp(cfg.frameWidth - border * 2 - cfg.frameInset * 0.25, 0.18, cfg.frameWidth)
+  const innerHeight = clamp(cfg.frameHeight - border * 2 - cfg.frameInset * 0.25, 0.18, cfg.frameHeight)
+
+  const inner = createRoundedRectShape(
+    innerWidth,
+    innerHeight,
+    Math.max(0, cfg.roundTop - border * 0.9),
+    Math.max(0, cfg.roundBottom - border * 0.9),
+    Math.max(0, cfg.roundLeft - border * 0.9),
+    Math.max(0, cfg.roundRight - border * 0.9)
+  )
+
+  const innerPts = inner.getPoints(80)
+  if (THREE.ShapeUtils.isClockWise(innerPts)) innerPts.reverse()
+  outer.holes.push(new THREE.Path(innerPts))
+
+  return { frameShape: outer, innerShape: inner, innerWidth, innerHeight }
+}
+
+function addControl(section, label, type, key, min, max, step) {
+  return { section, label, type, key, min, max, step }
+}
+
+const CONTROLS = [
+  addControl('Frame', 'Frame Count', 'range', 'frameCount', 3, 20, 1),
+  addControl('Frame', 'Frame Width', 'range', 'frameWidth', 0.8, 8, 0.01),
+  addControl('Frame', 'Frame Height', 'range', 'frameHeight', 1, 10, 0.01),
+  addControl('Frame', 'Frame Depth', 'range', 'frameDepth', 0.05, 0.8, 0.01),
+  addControl('Frame', 'Frame Border', 'range', 'frameBorder', 0.04, 1.2, 0.01),
+  addControl('Frame', 'Inner Inset', 'range', 'frameInset', 0.02, 0.8, 0.01),
+  addControl('Frame', 'Dome Depth', 'range', 'domeDepth', 0, 0.6, 0.005),
+  addControl('Frame', 'Frame Gap', 'range', 'frameGap', 0.4, 2, 0.01),
+  addControl('Frame', 'Depth Offset', 'range', 'depthOffset', -1.2, 1.2, 0.005),
+  addControl('Frame', 'Y Position', 'range', 'yOffset', -3, 3, 0.01),
+  addControl('Frame', 'Round Top', 'range', 'roundTop', 0, 5, 0.01),
+  addControl('Frame', 'Round Bottom', 'range', 'roundBottom', 0, 5, 0.01),
+  addControl('Frame', 'Round Left', 'range', 'roundLeft', 0, 5, 0.01),
+  addControl('Frame', 'Round Right', 'range', 'roundRight', 0, 5, 0.01),
+  addControl('Frame', 'Frame Roughness', 'range', 'frameRoughness', 0, 1, 0.01),
+  addControl('Frame', 'Frame Metalness', 'range', 'frameMetalness', 0, 1, 0.01),
+  addControl('Glass', 'Transmission', 'range', 'glassTransmission', 0, 1, 0.01),
+  addControl('Glass', 'Glass Rough', 'range', 'glassRoughness', 0, 0.8, 0.01),
+  addControl('Glass', 'Thickness', 'range', 'glassThickness', 0, 1.2, 0.01),
+  addControl('Glass', 'IOR', 'range', 'glassIor', 1, 2, 0.01),
+  addControl('Glass', 'Opacity', 'range', 'glassOpacity', 0.2, 1, 0.01),
+  addControl('Scene', 'Wall Radius X', 'range', 'wallRadiusX', 3, 20, 0.01),
+  addControl('Scene', 'Wall Radius Z', 'range', 'wallRadiusZ', 3, 20, 0.01),
+  addControl('Scene', 'Wall Height', 'range', 'wallHeight', 2.2, 16, 0.01),
+  addControl('Scene', 'Scene Rotation', 'range', 'rotationOffsetDeg', -180, 180, 1),
+  addControl('Scene', 'Scroll Rotate', 'range', 'scrollRotateStrength', 0.0005, 0.012, 0.0001),
+  addControl('Camera', 'Cam X', 'range', 'cameraX', -8, 8, 0.01),
+  addControl('Camera', 'Cam Y', 'range', 'cameraY', -3, 3, 0.01),
+  addControl('Camera', 'Cam Z', 'range', 'cameraZ', -8, 8, 0.01),
+  addControl('Camera', 'Look Y', 'range', 'cameraLookY', -3, 3, 0.01),
+  addControl('Camera', 'FOV', 'range', 'cameraFov', 35, 100, 1),
+  addControl('Color', 'Frame Color', 'color', 'frameColor'),
+  addControl('Color', 'Wall Color', 'color', 'wallColor'),
+  addControl('Color', 'Floor Color', 'color', 'floorColor'),
+  addControl('Color', 'Roof Color', 'color', 'roofColor'),
+  addControl('Color', 'Scene Tint', 'color', 'sceneTint')
+]
+
+function disposeHierarchy(group) {
+  group.traverse((obj) => {
+    if (obj.geometry) obj.geometry.dispose()
+    if (obj.material) {
+      if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose())
+      else obj.material.dispose()
+    }
+  })
+}
+
+export default function App() {
+  const mountRef = useRef(null)
+  const sceneDataRef = useRef(null)
+  const [config, setConfig] = useState(DEFAULT_CONFIG)
+  const [copyState, setCopyState] = useState('Copy Config')
+  const [isHelperOpen, setIsHelperOpen] = useState(true)
+
+  const serialized = useMemo(() => JSON.stringify(config, null, 2), [config])
+
+  useEffect(() => {
+    const mount = mountRef.current
+    if (!mount) return
+
+    const scene = new THREE.Scene()
+    scene.background = new THREE.Color(config.sceneTint)
+
+    const camera = new THREE.PerspectiveCamera(
+      config.cameraFov,
+      mount.clientWidth / mount.clientHeight,
+      0.1,
+      100
+    )
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setSize(mount.clientWidth, mount.clientHeight)
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.15
+    mount.appendChild(renderer.domElement)
+
+    const hemi = new THREE.HemisphereLight('#ffffff', '#bcc6df', 1.2)
+    scene.add(hemi)
+
+    const keyLight = new THREE.DirectionalLight('#ffffff', 1.45)
+    keyLight.position.set(3.4, 2.8, 3.2)
+    scene.add(keyLight)
+
+    const rim = new THREE.PointLight('#e7f0ff', 0.85, 30)
+    rim.position.set(-3.6, 0.8, -2.4)
+    scene.add(rim)
+
+    const sparkle = new THREE.PointLight('#fff1f7', 0.55, 28)
+    sparkle.position.set(2.2, -0.6, 2.8)
+    scene.add(sparkle)
+
+    const wallGroup = new THREE.Group()
+    scene.add(wallGroup)
+
+    const frameGroup = new THREE.Group()
+    scene.add(frameGroup)
+
+    const spin = { targetRotation: THREE.MathUtils.degToRad(config.rotationOffsetDeg) }
+
+    function rebuildScene(cfg) {
+      disposeHierarchy(wallGroup)
+      disposeHierarchy(frameGroup)
+      wallGroup.clear()
+      frameGroup.clear()
+
+      scene.background = new THREE.Color(cfg.sceneTint)
+
+      const wallRadiusX = cfg.wallRadiusX ?? cfg.wallRadius ?? 7
+      const wallRadiusZ = cfg.wallRadiusZ ?? cfg.wallRadius ?? 5.5
+
+      const wallMat = new THREE.MeshPhysicalMaterial({
+        color: cfg.wallColor,
+        roughness: 0.28,
+        metalness: 0.14,
+        clearcoat: 0.9,
+        clearcoatRoughness: 0.08,
+        side: THREE.BackSide
+      })
+
+      const wallGeo = new THREE.CylinderGeometry(1, 1, cfg.wallHeight, 128, 1, true)
+      const wallMesh = new THREE.Mesh(wallGeo, wallMat)
+      wallMesh.scale.set(wallRadiusX, 1, wallRadiusZ)
+      wallGroup.add(wallMesh)
+
+      const glossyMatParams = {
+        roughness: 0.03,
+        metalness: 0.36,
+        clearcoat: 1,
+        clearcoatRoughness: 0.02,
+        envMapIntensity: 1.3
+      }
+
+      const floorGeo = new THREE.CircleGeometry(1, 96)
+      const floorMat = new THREE.MeshPhysicalMaterial({
+        ...glossyMatParams,
+        color: cfg.floorColor,
+        side: THREE.DoubleSide
+      })
+      const floor = new THREE.Mesh(floorGeo, floorMat)
+      floor.rotation.x = Math.PI / 2
+      floor.position.y = -cfg.wallHeight / 2
+      floor.scale.set(wallRadiusX * 1.22, wallRadiusZ * 1.22, 1)
+      wallGroup.add(floor)
+
+      const roofGeo = new THREE.CircleGeometry(1, 96)
+      const roofMat = new THREE.MeshPhysicalMaterial({
+        ...glossyMatParams,
+        color: cfg.roofColor,
+        side: THREE.DoubleSide
+      })
+      const roof = new THREE.Mesh(roofGeo, roofMat)
+      roof.rotation.x = Math.PI / 2
+      roof.position.y = cfg.wallHeight / 2
+      roof.scale.set(wallRadiusX * 1.22, wallRadiusZ * 1.22, 1)
+      wallGroup.add(roof)
+
+      const angStep = ((Math.PI * 2) / cfg.frameCount) * cfg.frameGap
+      const baseRadiusX = wallRadiusX - cfg.frameDepth * 0.6 + cfg.depthOffset
+      const baseRadiusZ = wallRadiusZ - cfg.frameDepth * 0.6 + cfg.depthOffset
+
+      for (let i = 0; i < cfg.frameCount; i += 1) {
+        const angle = i * angStep
+
+        const holder = new THREE.Group()
+        holder.position.set(
+          Math.sin(angle) * baseRadiusX,
+          cfg.yOffset,
+          Math.cos(angle) * baseRadiusZ
+        )
+        holder.lookAt(0, cfg.yOffset, 0)
+
+        const { frameShape, innerShape, innerWidth, innerHeight } = createFrameShapes(cfg)
+
+        const ringGeo = new THREE.ExtrudeGeometry(frameShape, {
+          depth: cfg.frameDepth,
+          steps: 1,
+          bevelEnabled: true,
+          bevelSegments: 4,
+          bevelSize: clamp(cfg.frameBorder * 0.25, 0.01, 0.14),
+          bevelThickness: clamp(cfg.frameDepth * 0.35, 0.01, 0.18),
+          curveSegments: 28
+        })
+        ringGeo.center()
+
+        const ringMat = new THREE.MeshPhysicalMaterial({
+          color: cfg.frameColor,
+          roughness: clamp(cfg.frameRoughness * 0.5, 0.02, 1),
+          metalness: clamp(cfg.frameMetalness + 0.1, 0, 1),
+          clearcoat: 1,
+          clearcoatRoughness: 0.04,
+          reflectivity: 1
+        })
+
+        const ringMesh = new THREE.Mesh(ringGeo, ringMat)
+
+        const domeGeo = new THREE.ShapeGeometry(innerShape, 40)
+        const pos = domeGeo.attributes.position
+        const halfW = Math.max(innerWidth * 0.5, 0.01)
+        const halfH = Math.max(innerHeight * 0.5, 0.01)
+        for (let idx = 0; idx < pos.count; idx += 1) {
+          const x = pos.getX(idx)
+          const y = pos.getY(idx)
+          const nx = x / halfW
+          const ny = y / halfH
+          const falloff = clamp(1 - (nx * nx + ny * ny), 0, 1)
+          const z = cfg.domeDepth * Math.pow(falloff, 1.35)
+          pos.setZ(idx, z)
+        }
+        pos.needsUpdate = true
+        domeGeo.computeVertexNormals()
+
+        const domeMat = new THREE.MeshPhysicalMaterial({
+          color: new THREE.Color(cfg.frameColor).lerp(new THREE.Color('#ffffff'), 0.32),
+          roughness: cfg.glassRoughness,
+          metalness: 0,
+          transmission: cfg.glassTransmission,
+          thickness: cfg.glassThickness,
+          ior: cfg.glassIor,
+          clearcoat: 1,
+          clearcoatRoughness: 0.03,
+          transparent: true,
+          opacity: cfg.glassOpacity,
+          side: THREE.DoubleSide
+        })
+
+        const dome = new THREE.Mesh(domeGeo, domeMat)
+        dome.scale.set(0.985, 0.985, 1)
+        dome.position.z = cfg.frameDepth * 0.34
+
+        holder.add(ringMesh)
+        holder.add(dome)
+        frameGroup.add(holder)
+      }
+
+      spin.targetRotation = THREE.MathUtils.degToRad(cfg.rotationOffsetDeg)
+      frameGroup.rotation.y = spin.targetRotation
+    }
+
+    function applyCamera(cfg) {
+      camera.fov = cfg.cameraFov
+      camera.position.set(cfg.cameraX, cfg.cameraY, cfg.cameraZ)
+      camera.lookAt(0, cfg.cameraLookY, 1)
+      camera.updateProjectionMatrix()
+    }
+
+    rebuildScene(config)
+    applyCamera(config)
+
+    const onResize = () => {
+      const w = mount.clientWidth
+      const h = mount.clientHeight
+      camera.aspect = w / h
+      camera.updateProjectionMatrix()
+      renderer.setSize(w, h)
+    }
+
+    const onWheel = (event) => {
+      const strength = sceneDataRef.current?.settings?.scrollRotateStrength ?? DEFAULT_CONFIG.scrollRotateStrength
+      spin.targetRotation += event.deltaY * strength
+    }
+
+    window.addEventListener('resize', onResize)
+    mount.addEventListener('wheel', onWheel, { passive: true })
+
+    let rafId = 0
+    const tick = (now) => {
+      const t = now * 0.001
+      keyLight.position.x = Math.sin(t * 0.46) * 4.2
+      keyLight.position.z = Math.cos(t * 0.34) * 3.2
+      rim.intensity = 0.75 + Math.sin(t * 0.9) * 0.12
+      sparkle.position.x = 2.2 + Math.sin(t * 0.7) * 0.9
+
+      frameGroup.rotation.y += (spin.targetRotation - frameGroup.rotation.y) * 0.1
+      renderer.render(scene, camera)
+      rafId = window.requestAnimationFrame(tick)
+    }
+
+    rafId = window.requestAnimationFrame(tick)
+
+    sceneDataRef.current = {
+      rebuildScene,
+      applyCamera,
+      settings: {
+        scrollRotateStrength: config.scrollRotateStrength
+      },
+      dispose() {
+        window.cancelAnimationFrame(rafId)
+        window.removeEventListener('resize', onResize)
+        mount.removeEventListener('wheel', onWheel)
+        disposeHierarchy(wallGroup)
+        disposeHierarchy(frameGroup)
+        wallGroup.clear()
+        frameGroup.clear()
+        renderer.dispose()
+        if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement)
+      }
+    }
+
+    return () => {
+      sceneDataRef.current?.dispose()
+      sceneDataRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!sceneDataRef.current) return
+    sceneDataRef.current.rebuildScene(config)
+    sceneDataRef.current.applyCamera(config)
+    sceneDataRef.current.settings.scrollRotateStrength = config.scrollRotateStrength
+  }, [config])
+
+  const updateField = (key, value) => {
+    setConfig((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const copyConfig = async () => {
+    try {
+      await navigator.clipboard.writeText(serialized)
+      setCopyState('Copied')
+      window.setTimeout(() => setCopyState('Copy Config'), 1200)
+    } catch {
+      setCopyState('Copy Failed')
+      window.setTimeout(() => setCopyState('Copy Config'), 1500)
+    }
+  }
+
+  const groupedControls = CONTROLS.reduce((acc, control) => {
+    if (!acc[control.section]) acc[control.section] = []
+    acc[control.section].push(control)
+    return acc
+  }, {})
+
+  return (
+    <div className="app-shell">
+      <div className={`toolbar ${isHelperOpen ? '' : 'toolbar-collapsed'}`}>
+        <div className="toolbar-head">
+          <strong>Scene Helper</strong>
+          <span className="live-dot" />
+          <button type="button" onClick={() => setConfig(DEFAULT_CONFIG)}>
+            Reset
+          </button>
+          <button type="button" onClick={copyConfig}>
+            {copyState}
+          </button>
+          <button type="button" onClick={() => setIsHelperOpen((prev) => !prev)}>
+            {isHelperOpen ? 'Hide Helper' : 'Show Helper'}
+          </button>
+        </div>
+
+        <p className="hint">Scroll rotates the scene ring. Frames are window-rings with curved glass dome interiors.</p>
+
+        <div className={`section-grid ${isHelperOpen ? '' : 'hidden'}`}>
+          {Object.entries(groupedControls).map(([section, sectionControls]) => (
+            <section className="control-section" key={section}>
+              <h4>{section}</h4>
+              <div className="controls-grid">
+                {sectionControls.map((control) => {
+                  const value = config[control.key]
+                  if (control.type === 'color') {
+                    return (
+                      <label key={control.key} className="control-item color-item">
+                        <span>{control.label}</span>
+                        <input
+                          type="color"
+                          value={value}
+                          onChange={(e) => updateField(control.key, e.target.value)}
+                        />
+                      </label>
+                    )
+                  }
+
+                  return (
+                    <label key={control.key} className="control-item">
+                      <span>{control.label}</span>
+                      <input
+                        type="range"
+                        min={control.min}
+                        max={control.max}
+                        step={control.step}
+                        value={value}
+                        onChange={(e) => updateField(control.key, Number(e.target.value))}
+                      />
+                      <small>{Number(value).toFixed(3).replace(/\.000$/, '')}</small>
+                    </label>
+                  )
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
+      </div>
+
+      <div className="scene-wrap" ref={mountRef} />
+    </div>
+  )
+}
