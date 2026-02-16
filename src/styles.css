@@ -314,3 +314,197 @@ button:hover {
     max-height: none;
   }
 }
+
+.second-shell {
+  background:
+    radial-gradient(circle at 50% -30%, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0) 55%),
+    linear-gradient(180deg, #d7dbe2 0%, #cfd4dd 100%);
+}
+
+.second-topbar {
+  position: absolute;
+  top: 18px;
+  left: 24px;
+  right: 24px;
+  z-index: 20;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.second-brand span,
+.second-brand strong {
+  display: block;
+  color: #f4f4f4;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.second-brand span {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.second-brand strong {
+  font-size: 40px;
+  line-height: 0.95;
+}
+
+.second-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.second-actions button,
+.second-actions .route-link-btn {
+  min-height: 46px;
+  border-radius: 999px;
+  padding: 0 24px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f7f7f7;
+  backdrop-filter: blur(4px);
+  box-shadow: none;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 11px;
+}
+
+.second-active-copy {
+  position: absolute;
+  top: 82px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  text-align: center;
+  color: #2a2d32;
+}
+
+.second-active-copy h2 {
+  margin: 0;
+  font-size: clamp(34px, 4vw, 62px);
+  letter-spacing: 0.01em;
+  text-transform: capitalize;
+}
+
+.second-active-copy p {
+  margin: 4px 0 0;
+  font-size: clamp(24px, 2vw, 38px);
+  color: #3b3f47;
+}
+
+.second-timeline-wrap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  padding: 16px 24px 20px;
+  background: linear-gradient(180deg, rgba(206, 211, 221, 0) 0%, rgba(173, 179, 192, 0.56) 38%, rgba(129, 135, 148, 0.68) 100%);
+  overflow: hidden;
+}
+
+.second-timeline-line {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  top: 32px;
+  height: 0;
+  border-bottom: 2px dotted rgba(255, 255, 255, 0.74);
+  pointer-events: none;
+}
+
+.second-timeline-grid {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(110px, 1fr));
+  gap: 10px;
+  position: relative;
+  z-index: 1;
+  padding-top: 0;
+}
+
+.second-timeline-item {
+  background: transparent;
+  border: 0;
+  color: rgba(255, 255, 255, 0.62);
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  min-height: auto;
+}
+
+.second-timeline-item .dot {
+  width: 14px;
+  height: 14px;
+  margin-top: 8px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.second-timeline-item strong {
+  text-transform: uppercase;
+  font-size: 14px;
+  letter-spacing: 0.03em;
+  text-align: center;
+}
+
+.second-timeline-item small {
+  font-size: 12px;
+}
+
+.second-timeline-item.active {
+  color: #ffffff;
+}
+
+.second-timeline-item.active .dot {
+  background: #ffffff;
+  transform: scale(1.18);
+}
+
+.second-scroll-hint {
+  text-align: center;
+  margin-top: 14px;
+  color: rgba(255, 255, 255, 0.92);
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  font-size: 10px;
+}
+
+@media (max-width: 1080px) {
+  .second-topbar {
+    left: 14px;
+    right: 14px;
+  }
+
+  .second-brand strong {
+    font-size: 28px;
+  }
+
+  .second-actions {
+    gap: 8px;
+  }
+
+  .second-actions button,
+  .second-actions .route-link-btn {
+    min-height: 38px;
+    padding: 0 14px;
+    letter-spacing: 0.09em;
+  }
+
+  .second-timeline-grid {
+    overflow-x: auto;
+    display: flex;
+    gap: 14px;
+    padding-bottom: 8px;
+    padding-top: 0;
+  }
+
+  .second-timeline-item {
+    min-width: 130px;
+  }
+}
