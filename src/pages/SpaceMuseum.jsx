@@ -88,8 +88,6 @@ const DEFAULT_CONFIG = {
   cardScale: 0.42,
   cardYOffset: 0.24,
   cardGlassOpacity: 0.14,
-  nebulaOpacity: 0.19,
-  nebulaScale: 1.2,
   bloomStrength: 1.15,
   bloomRadius: 0.6,
   bloomThreshold: 0.2,
@@ -100,7 +98,7 @@ const DEFAULT_CONFIG = {
 
 const PARTICLE_DEFAULTS = {
   count: 2600,
-  size: 0.24,
+  size: 0.09,
   opacity: 0.82,
   glow: 2,
   randomness: 0.86,
@@ -109,9 +107,6 @@ const PARTICLE_DEFAULTS = {
   spreadY: 10,
   spinSpeed: 0.35,
   twinkle: 0.72,
-  networkDistance: 2.9,
-  networkSpeed: 0.18,
-  networkOpacity: 0.2,
   colorA: '#79beff',
   colorB: '#f1e2ff'
 }
@@ -126,10 +121,7 @@ const PARTICLE_CONTROLS = [
   { key: 'travelRadius', label: 'Move Radius', min: 0, max: 8, step: 0.05 },
   { key: 'spreadY', label: 'Vertical Spread', min: 1, max: 22, step: 0.1 },
   { key: 'spinSpeed', label: 'Spin Speed', min: 0, max: 1.8, step: 0.01 },
-  { key: 'twinkle', label: 'Twinkle', min: 0, max: 2.2, step: 0.01 },
-  { key: 'networkDistance', label: 'Net Distance', min: 0.8, max: 6, step: 0.05 },
-  { key: 'networkSpeed', label: 'Net Speed', min: 0, max: 1, step: 0.01 },
-  { key: 'networkOpacity', label: 'Net Opacity', min: 0, max: 0.9, step: 0.01 }
+  { key: 'twinkle', label: 'Twinkle', min: 0, max: 2.2, step: 0.01 }
 ]
 
 const THEME_CONTROLS = [
@@ -166,8 +158,6 @@ const THEME_CONTROLS = [
   { key: 'cardScale', label: 'Card Scale', min: 0.2, max: 0.8, step: 0.01 },
   { key: 'cardYOffset', label: 'Card Y Offset', min: 0.08, max: 0.45, step: 0.01 },
   { key: 'cardGlassOpacity', label: 'Card Glass', min: 0, max: 0.5, step: 0.01 },
-  { key: 'nebulaOpacity', label: 'Nebula Opacity', min: 0, max: 0.45, step: 0.01 },
-  { key: 'nebulaScale', label: 'Nebula Scale', min: 0.6, max: 1.8, step: 0.01 },
   { key: 'bloomStrength', label: 'Bloom Strength', min: 0, max: 3, step: 0.01 },
   { key: 'bloomRadius', label: 'Bloom Radius', min: 0, max: 1.5, step: 0.01 },
   { key: 'bloomThreshold', label: 'Bloom Threshold', min: 0, max: 1, step: 0.01 },
@@ -423,22 +413,10 @@ export default function SpaceMuseum() {
 
     const particleGroup = new THREE.Group()
     scene.add(particleGroup)
-    const neuralGroup = new THREE.Group()
-    scene.add(neuralGroup)
 
     const waterMaterials = []
     const frameMeta = []
     const particleLayers = []
-    const neuralState = {
-      nodes: [],
-      bounds: new THREE.Vector3(18, 10, 18),
-      pointCloud: null,
-      lineGeometry: null,
-      linePositions: null,
-      lineMaterial: null,
-      maxLines: 0,
-      nodePositionArray: null
-    }
 
     const textureLoader = new THREE.TextureLoader()
     textureLoader.setCrossOrigin('anonymous')
@@ -711,22 +689,8 @@ export default function SpaceMuseum() {
         cardLabel.position.set(0, -faceHeight * cfg.cardYOffset, 0.183)
         holder.add(cardLabel)
 
-        const nebula = new THREE.Mesh(
-          new THREE.PlaneGeometry(faceWidth * cfg.nebulaScale, faceHeight * cfg.nebulaScale),
-          new THREE.MeshBasicMaterial({
-            map: getTexture(smokeTexture),
-            color: glowColor,
-            transparent: true,
-            opacity: cfg.nebulaOpacity,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false
-          })
-        )
-        nebula.position.z = -0.12
-        holder.add(nebula)
-
         frameGroup.add(holder)
-        frameMeta.push({ holder, baseAngle: angle, nebula, cardImage, cardGlass, cardLabel, lineHot, faceHeight })
+        frameMeta.push({ holder, baseAngle: angle, cardImage, cardGlass, cardLabel, lineHot, faceHeight })
       }
 
       spin.targetRotation = THREE.MathUtils.degToRad(cfg.rotationOffsetDeg)
@@ -816,72 +780,6 @@ export default function SpaceMuseum() {
       }
     }
 
-    function rebuildNeural(cfg) {
-      disposeHierarchy(neuralGroup)
-      neuralGroup.clear()
-
-      const nodeCount = 68
-      const maxLines = 220
-      const nodes = []
-      const nodePositions = new Float32Array(nodeCount * 3)
-      const linePositions = new Float32Array(maxLines * 2 * 3)
-
-      for (let i = 0; i < nodeCount; i += 1) {
-        const pos = new THREE.Vector3(
-          (Math.random() - 0.5) * neuralState.bounds.x,
-          (Math.random() - 0.5) * neuralState.bounds.y,
-          (Math.random() - 0.5) * neuralState.bounds.z
-        )
-        const vel = new THREE.Vector3(
-          (Math.random() - 0.5) * cfg.networkSpeed,
-          (Math.random() - 0.5) * cfg.networkSpeed * 0.7,
-          (Math.random() - 0.5) * cfg.networkSpeed
-        )
-        nodes.push({ pos, vel })
-        const i3 = i * 3
-        nodePositions[i3] = pos.x
-        nodePositions[i3 + 1] = pos.y
-        nodePositions[i3 + 2] = pos.z
-      }
-
-      const pointGeo = new THREE.BufferGeometry()
-      pointGeo.setAttribute('position', new THREE.BufferAttribute(nodePositions, 3))
-      const pointCloud = new THREE.Points(
-        pointGeo,
-        new THREE.PointsMaterial({
-          map: getTexture(particle1),
-          color: cfg.colorA,
-          size: 0.08,
-          transparent: true,
-          opacity: cfg.networkOpacity * 2.4,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending
-        })
-      )
-      neuralGroup.add(pointCloud)
-
-      const lineGeo = new THREE.BufferGeometry()
-      lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3))
-      lineGeo.setDrawRange(0, 0)
-      const lineMaterial = new THREE.LineBasicMaterial({
-        color: cfg.colorB,
-        transparent: true,
-        opacity: cfg.networkOpacity,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-      })
-      const lines = new THREE.LineSegments(lineGeo, lineMaterial)
-      neuralGroup.add(lines)
-
-      neuralState.nodes = nodes
-      neuralState.maxLines = maxLines
-      neuralState.pointCloud = pointCloud
-      neuralState.lineGeometry = lineGeo
-      neuralState.linePositions = linePositions
-      neuralState.lineMaterial = lineMaterial
-      neuralState.nodePositionArray = nodePositions
-    }
-
     function applyCamera(cfg) {
       camera.fov = cfg.cameraFov
       camera.position.set(cfg.cameraX, cfg.cameraY, cfg.cameraZ)
@@ -891,7 +789,6 @@ export default function SpaceMuseum() {
 
     rebuildScene(DEFAULT_CONFIG)
     rebuildParticles(PARTICLE_DEFAULTS)
-    rebuildNeural(PARTICLE_DEFAULTS)
     applyCamera(DEFAULT_CONFIG)
 
     const onResize = () => {
@@ -920,8 +817,6 @@ export default function SpaceMuseum() {
       for (const mat of waterMaterials) mat.uniforms.uTime.value = t
 
       for (const frame of frameMeta) {
-        frame.nebula.rotation.z = Math.sin(t * 0.18 + frame.baseAngle) * 0.28
-        frame.nebula.material.opacity = themeActive.nebulaOpacity * (0.6 + Math.abs(Math.sin(t * 0.4 + frame.baseAngle)) * 0.6)
         frame.cardImage.rotation.z = Math.sin(t * 0.35 + frame.baseAngle) * 0.018
         frame.cardGlass.rotation.z = frame.cardImage.rotation.z * 0.75
         frame.cardLabel.rotation.z = frame.cardImage.rotation.z
@@ -951,49 +846,6 @@ export default function SpaceMuseum() {
 
       frameGroup.rotation.y += (spin.targetRotation - frameGroup.rotation.y) * 0.1
       particleGroup.rotation.y = t * 0.014
-
-      const nodes = neuralState.nodes
-      if (nodes.length && neuralState.lineGeometry && neuralState.nodePositionArray) {
-        const nodeArr = neuralState.nodePositionArray
-        const lineArr = neuralState.linePositions
-        let lineCursor = 0
-        const maxDistSq = active.networkDistance * active.networkDistance
-
-        for (let i = 0; i < nodes.length; i += 1) {
-          const node = nodes[i]
-          node.pos.add(node.vel)
-          if (Math.abs(node.pos.x) > neuralState.bounds.x * 0.5) node.vel.x *= -1
-          if (Math.abs(node.pos.y) > neuralState.bounds.y * 0.5) node.vel.y *= -1
-          if (Math.abs(node.pos.z) > neuralState.bounds.z * 0.5) node.vel.z *= -1
-
-          nodeArr[i * 3] = node.pos.x
-          nodeArr[i * 3 + 1] = node.pos.y
-          nodeArr[i * 3 + 2] = node.pos.z
-        }
-
-        for (let i = 0; i < nodes.length; i += 1) {
-          for (let j = i + 1; j < nodes.length; j += 1) {
-            if (lineCursor >= neuralState.maxLines) break
-            const d = nodes[i].pos.distanceToSquared(nodes[j].pos)
-            if (d < maxDistSq) {
-              const p = lineCursor * 6
-              lineArr[p] = nodes[i].pos.x
-              lineArr[p + 1] = nodes[i].pos.y
-              lineArr[p + 2] = nodes[i].pos.z
-              lineArr[p + 3] = nodes[j].pos.x
-              lineArr[p + 4] = nodes[j].pos.y
-              lineArr[p + 5] = nodes[j].pos.z
-              lineCursor += 1
-            }
-          }
-          if (lineCursor >= neuralState.maxLines) break
-        }
-
-        neuralState.pointCloud.geometry.attributes.position.needsUpdate = true
-        neuralState.lineGeometry.attributes.position.needsUpdate = true
-        neuralState.lineGeometry.setDrawRange(0, lineCursor * 2)
-        neuralState.lineMaterial.opacity = active.networkOpacity
-      }
 
       let bestIndex = 0
       let bestScore = Infinity
@@ -1034,7 +886,6 @@ export default function SpaceMuseum() {
         this.themeSettings = cfg
       },
       rebuildParticles,
-      rebuildNeural,
       particleSettings: PARTICLE_DEFAULTS,
       themeSettings: DEFAULT_CONFIG,
       settings: {
@@ -1048,11 +899,9 @@ export default function SpaceMuseum() {
         disposeHierarchy(wallGroup)
         disposeHierarchy(frameGroup)
         disposeHierarchy(particleGroup)
-        disposeHierarchy(neuralGroup)
         wallGroup.clear()
         frameGroup.clear()
         particleGroup.clear()
-        neuralGroup.clear()
 
         composer.dispose?.()
         renderer.dispose()
@@ -1071,7 +920,6 @@ export default function SpaceMuseum() {
     if (!sceneDataRef.current) return
     sceneDataRef.current.particleSettings = particles
     sceneDataRef.current.rebuildParticles(particles)
-    sceneDataRef.current.rebuildNeural(particles)
   }, [particles])
 
   useEffect(() => {
