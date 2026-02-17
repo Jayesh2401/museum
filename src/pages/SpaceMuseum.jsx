@@ -98,7 +98,7 @@ const DEFAULT_CONFIG = {
 
 const PARTICLE_DEFAULTS = {
   count: 2600,
-  size: 0.09,
+  size: 0.095,
   opacity: 0.82,
   glow: 2,
   randomness: 0.86,
